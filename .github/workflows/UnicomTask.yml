@@ -1,0 +1,80 @@
+name: UnicomTask
+
+on:
+  push:
+    branches: main
+  gollum:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 22 * * *'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.x'
+    - uses: actions/cache@v2
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/run_in_Actions/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    - name: Set time zone
+      run: sudo timedatectl set-timezone 'Asia/Shanghai'
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+    - name: Build and publish
+      env:
+        USERS_COVER: ${{ secrets.USERS_COVER }}
+      run: |
+        echo "$USERS_COVER" > ./config.json
+        python index.py
+
+  merge:
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        ref: main
+        fetch-depth: 0
+        lfs: true
+
+    - name: Set git identity
+      run : |
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git config --global user.name "github-actions[bot]"
+    - name: Load upstream commits
+      run: |
+        git pull https://github.com/srcrs/UnicomTask.git --log --no-commit
+    - name: Apply commit changes
+      run: |
+        if [ -f ./.git/MERGE_MSG ]; then
+        mkdir ./tmp && cp ./.git/MERGE_MSG ./tmp/message
+        sed -i "1c [bot] AutoMerging: merge all upstream's changes:" ./tmp/message
+        sed -i '/^\#.*/d' ./tmp/message
+        git commit --file="./tmp/message"
+        else
+        echo "There is no merge commits."
+        fi
+    - name: Push Commits
+      env:
+        DOWNSTREAM_BRANCH: main
+        TZ: Asia/Shanghai
+      run: git push origin $DOWNSTREAM_BRANCH
+
+  Delete_workflow_runs:
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+    - name: Delete workflow runs
+      uses: Mattraks/delete-workflow-runs@v1.2.2
+      with:
+        retain_days: 0.02
+        keep_minimum_runs: 3
