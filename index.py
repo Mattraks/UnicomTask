@@ -15,7 +15,9 @@ def get_woTree_glowList():
     index = client.post('https://m.client.10010.com/mactivity/arbordayJson/index.htm')
     index.encoding='utf-8'
     res = index.json()
-    return res['data']['flowChangeList']
+    output = res['data']['flowChangeList']
+    output += res['data']['shareFlowChangeList']
+    return output
 
 #沃之树任务
 #位置: 首页 --> 游戏 --> 沃之树
@@ -25,7 +27,18 @@ def woTree_task():
         flowList = get_woTree_glowList()
         num = 1
         for flow in flowList:
-            takeFlow = client.get('https://m.client.10010.com/mactivity/flowData/takeFlow.htm?flowId=' + flow['id'])
+            #这里会请求很长时间，发送即请求成功
+            flag = False
+            try:
+                takeFlow = client.get('https://m.client.10010.com/mactivity/flowData/takeFlow.htm?flowId=' + flow['id'], timeout=1)
+            except Exception as e:
+                flag = True
+                logging.info('【沃之树-领流量新】: 4M流量 x' + str(num))
+            #等待1秒钟
+            time.sleep(1)
+            num = num + 1
+            if flag:
+                continue
             takeFlow.encoding='utf-8'
             res1 = takeFlow.json()
             if res1['code'] == '0000':
@@ -99,7 +112,7 @@ def luckDraw_task():
             res = luck.json()
             logging.info('【天天抽奖】: ' + res['RspMsg'] + ' x' + str(i+1))
             #等待1秒钟
-            time.sleep(1)
+            time.sleep(5)
     except Exception as e:
         print(traceback.format_exc())
         logging.error('【天天抽奖】: 错误，原因为: ' + str(e))
@@ -172,14 +185,9 @@ def day100Integral_task():
 def pointsLottery_task(n):
     try:
         numjsp = get_encryptmobile()
-        #每日首次免费
-        oneFree = client.post('https://m.client.10010.com/dailylottery/static/integral/choujiang?usernumberofjsp=' + numjsp)
-        oneFree.encoding = 'utf-8'
-        res1 = oneFree.json()
-        logging.info("【积分抽奖】: " + res1['RspMsg'] + ' x免费')
         #如果用户未设置此值，将不会自动抽奖
-        #预防用户输入30以上，造成不必要的抽奖操作
-        num = min(30,int(n))
+        #预防用户输入10以上，造成不必要的抽奖操作
+        num = min(10,int(n))
         for i in range(num):
             #用积分兑换抽奖机会
             client.get('https://m.client.10010.com/dailylottery/static/integral/duihuan?goldnumber=10&banrate=30&usernumberofjsp=' + numjsp)
@@ -331,35 +339,39 @@ def getflowEndTime(username):
 
 #激活即将过期的流量包
 def actionFlow(username):
-    #获得所有未使用的流量包
-    datas = getStorageFlow(username)
-    #获得流量包还剩多长时间到期时间戳
-    endTime = getflowEndTime(username)
-    #流量包下标
-    i = 0
-    flag = True
-    for end in endTime:
-        #如果时间小于1天就激活
-        #程序早上7：30运行，正好当天可使用
-        if end < 86400:
-            flag = False
-            activeData = {
-                'activeCode': datas[i]['activeCode'],
-                'prizeRecordID': datas[i]['prizeRecordID'],
-                'activeName': '做任务领奖品'
-            }
-            #激活流量包
-            res = client.post('http://m.client.10010.com/myPrizeForActivity/myPrize/activationFlowPackages.htm',data=activeData)
-            res.encoding = 'utf-8'
-            res = res.json()
-            if res['status'] == '200':
-                logging.info('【即将过期流量包】: ' + '激活成功')
-            else:
-                logging.info('【即将过期流量包】: ' + '激活失败')
-            time.sleep(8)
-        i = i + 1
-    if flag:
-        logging.info('【即将过期流量包】: 暂无')
+    try:
+        #获得所有未使用的流量包
+        datas = getStorageFlow(username)
+        #获得流量包还剩多长时间到期时间戳
+        endTime = getflowEndTime(username)
+        #流量包下标
+        i = 0
+        flag = True
+        for end in endTime:
+            #如果时间小于1天就激活
+            #程序早上7：30运行，正好当天可使用
+            if end < 86400:
+                flag = False
+                activeData = {
+                    'activeCode': datas[i]['activeCode'],
+                    'prizeRecordID': datas[i]['prizeRecordID'],
+                    'activeName': '做任务领奖品'
+                }
+                #激活流量包
+                res = client.post('http://m.client.10010.com/myPrizeForActivity/myPrize/activationFlowPackages.htm',data=activeData)
+                res.encoding = 'utf-8'
+                res = res.json()
+                if res['status'] == '200':
+                    logging.info('【即将过期流量包】: ' + '激活成功')
+                else:
+                    logging.info('【即将过期流量包】: ' + '激活失败')
+                time.sleep(8)
+            i = i + 1
+        if flag:
+            logging.info('【即将过期流量包】: 暂无')
+    except Exception as e:
+        print(traceback.format_exc())
+        logging.error('【即将过期流量包】: 错误, ' + stat['msgStr'])
 
 #每月领取1G流量包，仅限湖北用户
 #位置：暂时不清楚
@@ -405,7 +417,7 @@ def autoKingCardWelfare(upgradeType):
             logging.error('【王卡福利续约】: 错误, ' + stat['msgStr'])
 
 #腾讯云函数入口
-def main(event, context):
+def main_handler(event, context):
     users = readJson()
     for user in users:
         #清空上一个用户的日志记录
@@ -445,4 +457,4 @@ def main(event, context):
 
 #主函数入口
 if __name__ == '__main__':
-    main("","")
+    main_handler("","")
