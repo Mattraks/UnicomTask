@@ -29,7 +29,7 @@ jobs:
       env:
         USERS_COVER: ${{ secrets.USERS_COVER }}
       run: |
-        echo "$USERS_COVER" > ./config.json
+        echo "$USERS_COVER" > ./config/config.json
         python index.py
 
   Delete_workflow_runs:
